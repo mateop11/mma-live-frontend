@@ -2,6 +2,43 @@ import { defineStore } from 'pinia'
 import { boutService } from '../services/api'
 import wsService from '../services/websocket'
 
+const mapBoutStateToStatus = (state) => {
+  switch (state) {
+    case 'Programada': return 'SCHEDULED'
+    case 'EnCurso': return 'LIVE'
+    case 'Pausada': return 'PAUSED'
+    case 'Finalizada': return 'FINISHED'
+    case 'Cancelada': return 'CANCELLED'
+    default: return state || 'SCHEDULED'
+  }
+}
+
+const fighterToBoutFrontend = (fighter) => {
+  if (!fighter) return null
+  const recordW = fighter.recordW ?? 0
+  const recordL = fighter.recordL ?? 0
+  const recordD = fighter.recordD ?? 0
+  return {
+    ...fighter,
+    name: `${fighter.firstName || ''} ${fighter.lastName || ''}`.trim(),
+    record: `${recordW}-${recordL}-${recordD}`
+  }
+}
+
+const normalizeBout = (data) => {
+  if (!data) return data
+  const bout = data.bout ? data.bout : data
+  return {
+    ...bout,
+    fighter1: fighterToBoutFrontend(bout.fighter1),
+    fighter2: fighterToBoutFrontend(bout.fighter2),
+    winner: fighterToBoutFrontend(bout.winner),
+    status: mapBoutStateToStatus(bout.state || bout.status),
+    state: bout.state,
+    scheduledDate: bout.scheduledAt || bout.scheduledDate
+  }
+}
+
 export const useBoutStore = defineStore('bouts', {
   state: () => ({
     bouts: [],
@@ -148,25 +185,27 @@ export const useBoutStore = defineStore('bouts', {
     },
 
     updateBoutInState(updatedBout) {
+      const normalized = normalizeBout(updatedBout)
+
       // Actualizar en lista de peleas
-      const index = this.bouts.findIndex(b => b.id === updatedBout.id)
+      const index = this.bouts.findIndex(b => b.id === normalized.id)
       if (index !== -1) {
-        this.bouts[index] = updatedBout
+        this.bouts[index] = normalized
       }
 
       // Actualizar en peleas en vivo
-      const liveIndex = this.liveBouts.findIndex(b => b.id === updatedBout.id)
+      const liveIndex = this.liveBouts.findIndex(b => b.id === normalized.id)
       if (liveIndex !== -1) {
-        this.liveBouts[liveIndex] = updatedBout
-      } else if (updatedBout.status === 'LIVE') {
-        this.liveBouts.push(updatedBout)
-      } else if (updatedBout.status !== 'LIVE') {
-        this.liveBouts = this.liveBouts.filter(b => b.id !== updatedBout.id)
+        this.liveBouts[liveIndex] = normalized
+      } else if (normalized.status === 'LIVE') {
+        this.liveBouts.push(normalized)
+      } else if (normalized.status !== 'LIVE') {
+        this.liveBouts = this.liveBouts.filter(b => b.id !== normalized.id)
       }
 
       // Actualizar pelea actual
-      if (this.currentBout?.id === updatedBout.id) {
-        this.currentBout = updatedBout
+      if (this.currentBout?.id === normalized.id) {
+        this.currentBout = normalized
       }
     },
 

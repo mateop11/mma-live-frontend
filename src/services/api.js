@@ -187,30 +187,96 @@ export const fighterService = {
 // ============================================
 // SERVICIO DE PELEAS
 // ============================================
+const mapBoutStateToStatus = (state) => {
+  switch (state) {
+    case 'Programada': return 'SCHEDULED'
+    case 'EnCurso': return 'LIVE'
+    case 'Pausada': return 'PAUSED'
+    case 'Finalizada': return 'FINISHED'
+    case 'Cancelada': return 'CANCELLED'
+    default: return state || 'SCHEDULED'
+  }
+}
+
+const mapStatusToBoutState = (status) => {
+  switch (status) {
+    case 'SCHEDULED': return 'Programada'
+    case 'LIVE': return 'EnCurso'
+    case 'PAUSED': return 'Pausada'
+    case 'FINISHED': return 'Finalizada'
+    case 'CANCELLED': return 'Cancelada'
+    default: return status || 'Programada'
+  }
+}
+
+const fighterToBoutFrontend = (fighter) => {
+  if (!fighter) return null
+  const recordW = fighter.recordW ?? 0
+  const recordL = fighter.recordL ?? 0
+  const recordD = fighter.recordD ?? 0
+  return {
+    ...fighter,
+    name: `${fighter.firstName || ''} ${fighter.lastName || ''}`.trim(),
+    record: `${recordW}-${recordL}-${recordD}`
+  }
+}
+
+const boutToFrontend = (bout) => ({
+  id: bout.id,
+  boutNumber: bout.boutNumber,
+  fighter1: fighterToBoutFrontend(bout.fighter1),
+  fighter2: fighterToBoutFrontend(bout.fighter2),
+  winner: fighterToBoutFrontend(bout.winner),
+  status: mapBoutStateToStatus(bout.state || bout.status),
+  state: bout.state || mapStatusToBoutState(bout.status),
+  totalRounds: bout.totalRounds,
+  currentRound: bout.currentRound,
+  decisionMethod: bout.decisionMethod,
+  decisionType: bout.decisionType,
+  scheduledDate: bout.scheduledAt || bout.scheduledDate,
+  scheduledAt: bout.scheduledAt,
+  eventId: bout.eventId,
+  eventName: bout.eventName
+})
+
+const boutToBackendCreate = (data) => ({
+  fighter1Id: data.fighter1Id,
+  fighter2Id: data.fighter2Id,
+  rounds: data.rounds ?? data.totalRounds ?? 3,
+  eventId: data.eventId || null
+})
+
+const boutToBackendUpdate = (data) => ({
+  state: data.state || mapStatusToBoutState(data.status),
+  currentRound: data.currentRound,
+  winnerId: data.winnerId,
+  decisionMethod: data.decisionMethod
+})
+
 export const boutService = {
   getAll: async () => {
     const response = await api.get('/public/bouts')
-    return response.data
+    return response.data.map(boutToFrontend)
   },
   
   getById: async (id) => {
     const response = await api.get(`/public/bouts/${id}`)
-    return response.data
+    return boutToFrontend(response.data)
   },
   
   getLive: async () => {
     const response = await api.get('/public/bouts/live')
-    return response.data
+    return response.data.map(boutToFrontend)
   },
   
   create: async (boutData) => {
-    const response = await api.post('/admin/bouts', boutData)
-    return response.data
+    const response = await api.post('/admin/bouts', boutToBackendCreate(boutData))
+    return boutToFrontend(response.data)
   },
   
   update: async (id, boutData) => {
-    const response = await api.put(`/admin/bouts/${id}`, boutData)
-    return response.data
+    const response = await api.put(`/admin/bouts/${id}`, boutToBackendUpdate(boutData))
+    return boutToFrontend(response.data)
   },
   
   delete: async (id) => {

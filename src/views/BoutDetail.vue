@@ -32,7 +32,10 @@
         </div>
       </div>
 
-      <div v-if="authStore.isJudge && boutStore.currentBout.status === 'LIVE'" class="judge-controls">
+      <div
+        v-if="authStore.isJudge && ['SCHEDULED', 'LIVE', 'PAUSED'].includes(boutStore.currentBout.status)"
+        class="judge-controls"
+      >
         <h3>Controles del Juez</h3>
         <div class="controls-grid">
           <button @click="handleStart" :disabled="boutStore.currentBout.status !== 'SCHEDULED'">Iniciar</button>

@@ -27,22 +27,75 @@
       <div class="modal-content" @click.stop>
         <h2>{{ editingBout ? 'Editar' : 'Nueva' }} Pelea</h2>
         <form @submit.prevent="saveBout">
-          <div class="form-group">
-            <label>Peleador 1 ID</label>
-            <input v-model.number="form.fighter1Id" type="number" required />
-          </div>
-          <div class="form-group">
-            <label>Peleador 2 ID</label>
-            <input v-model.number="form.fighter2Id" type="number" required />
-          </div>
-          <div class="form-group">
-            <label>Rounds</label>
-            <input v-model.number="form.totalRounds" type="number" required />
-          </div>
-          <div class="form-group">
-            <label>Fecha Programada</label>
-            <input v-model="form.scheduledDate" type="datetime-local" required />
-          </div>
+          <template v-if="!editingBout">
+            <div class="form-group">
+              <label>Peleador 1</label>
+              <select v-model.number="form.fighter1Id" required>
+                <option value="" disabled>Selecciona un peleador</option>
+                <option v-for="fighter in fighterStore.fighters" :key="fighter.id" :value="fighter.id">
+                  {{ fighter.name }} ({{ fighter.id }})
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Peleador 2</label>
+              <select v-model.number="form.fighter2Id" required>
+                <option value="" disabled>Selecciona un peleador</option>
+                <option v-for="fighter in fighterStore.fighters" :key="fighter.id" :value="fighter.id">
+                  {{ fighter.name }} ({{ fighter.id }})
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Rounds</label>
+              <input v-model.number="form.rounds" type="number" min="1" required />
+            </div>
+            <div class="form-group">
+              <label>Evento (ID opcional)</label>
+              <input v-model.number="form.eventId" type="number" />
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="form-group">
+              <label>Estado</label>
+              <select v-model="form.status" required>
+                <option value="SCHEDULED">Programada</option>
+                <option value="LIVE">En curso</option>
+                <option value="PAUSED">Pausada</option>
+                <option value="FINISHED">Finalizada</option>
+                <option value="CANCELLED">Cancelada</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Round actual</label>
+              <input v-model.number="form.currentRound" type="number" min="1" />
+            </div>
+            <div class="form-group">
+              <label>Ganador</label>
+              <select v-model.number="form.winnerId">
+                <option :value="null">Sin ganador</option>
+                <option v-if="editingBout?.fighter1" :value="editingBout.fighter1.id">
+                  {{ editingBout.fighter1.name }}
+                </option>
+                <option v-if="editingBout?.fighter2" :value="editingBout.fighter2.id">
+                  {{ editingBout.fighter2.name }}
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Método de decisión</label>
+              <select v-model="form.decisionMethod">
+                <option :value="null">No aplica</option>
+                <option value="Decision">Decision</option>
+                <option value="KO">KO</option>
+                <option value="TKO">TKO</option>
+                <option value="SUB">SUB</option>
+                <option value="DQ">DQ</option>
+                <option value="NC">NC</option>
+              </select>
+            </div>
+          </template>
           <div class="modal-actions">
             <button type="button" @click="showModal = false" class="btn-cancel">Cancelar</button>
             <button type="submit" class="btn-save">Guardar</button>
@@ -56,28 +109,35 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useBoutStore } from '../../stores/bouts'
+import { useFighterStore } from '../../stores/fighters'
 
 const boutStore = useBoutStore()
+const fighterStore = useFighterStore()
 const showModal = ref(false)
 const editingBout = ref(null)
 
 const form = reactive({
   fighter1Id: null,
   fighter2Id: null,
-  totalRounds: 3,
-  scheduledDate: ''
+  rounds: 3,
+  eventId: null,
+  status: 'SCHEDULED',
+  currentRound: 1,
+  winnerId: null,
+  decisionMethod: null
 })
 
 onMounted(() => {
   boutStore.fetchAll()
+  fighterStore.fetchAll()
 })
 
 const editBout = (bout) => {
   editingBout.value = bout
-  form.fighter1Id = bout.fighter1?.id
-  form.fighter2Id = bout.fighter2?.id
-  form.totalRounds = bout.totalRounds
-  form.scheduledDate = bout.scheduledDate ? new Date(bout.scheduledDate).toISOString().slice(0, 16) : ''
+  form.status = bout.status
+  form.currentRound = bout.currentRound || 1
+  form.winnerId = bout.winner?.id || null
+  form.decisionMethod = bout.decisionMethod || null
   showModal.value = true
 }
 
@@ -86,17 +146,31 @@ const resetForm = () => {
   Object.assign(form, {
     fighter1Id: null,
     fighter2Id: null,
-    totalRounds: 3,
-    scheduledDate: ''
+    rounds: 3,
+    eventId: null,
+    status: 'SCHEDULED',
+    currentRound: 1,
+    winnerId: null,
+    decisionMethod: null
   })
 }
 
 const saveBout = async () => {
   try {
     if (editingBout.value) {
-      await boutStore.updateBout(editingBout.value.id, form)
+      await boutStore.updateBout(editingBout.value.id, {
+        status: form.status,
+        currentRound: form.currentRound,
+        winnerId: form.winnerId,
+        decisionMethod: form.decisionMethod
+      })
     } else {
-      await boutStore.createBout(form)
+      await boutStore.createBout({
+        fighter1Id: form.fighter1Id,
+        fighter2Id: form.fighter2Id,
+        rounds: form.rounds,
+        eventId: form.eventId
+      })
     }
     showModal.value = false
     resetForm()
@@ -218,7 +292,8 @@ const formatDate = (dateString) => {
   color: #333;
 }
 
-.form-group input {
+.form-group input,
+.form-group select {
   width: 100%;
   padding: 0.75rem;
   border: 2px solid #e0e0e0;
