@@ -36,9 +36,63 @@ api.interceptors.response.use(
 )
 
 // ============================================
-// El backend ya maneja la conversión de campos
-// Solo pasamos los datos tal cual
+// Helpers: conversión Frontend <-> Backend
+// (backend antiguo espera firstName/lastName/categoryWeight)
 // ============================================
+
+const weightToCategory = (weight) => {
+  if (!weight) return 'Lightweight'
+  const w = parseInt(weight)
+  if (w <= 66) return 'Featherweight'
+  if (w <= 70) return 'Lightweight'
+  if (w <= 77) return 'Welterweight'
+  if (w <= 84) return 'Middleweight'
+  return 'Heavyweight'
+}
+
+const categoryToWeight = (category) => {
+  if (!category) return 70
+  switch (category) {
+    case 'Featherweight': return 66
+    case 'Lightweight': return 70
+    case 'Welterweight': return 77
+    case 'Middleweight': return 84
+    case 'Heavyweight': return 120
+    default: return 70
+  }
+}
+
+const fighterToBackend = (data) => {
+  const nameParts = (data.name || '').trim().split(/\s+/)
+  const firstName = data.firstName || nameParts[0] || ''
+  const lastName = data.lastName || nameParts.slice(1).join(' ') || ''
+
+  return {
+    firstName,
+    lastName,
+    club: data.style || data.club || '',
+    categoryWeight: data.categoryWeight || weightToCategory(data.weight),
+    status: data.status || 'Active',
+    recordW: data.wins ?? data.recordW ?? 0,
+    recordL: data.losses ?? data.recordL ?? 0,
+    recordD: data.draws ?? data.recordD ?? 0
+  }
+}
+
+const fighterToFrontend = (data) => ({
+  id: data.id,
+  name: `${data.firstName || ''} ${data.lastName || ''}`.trim(),
+  firstName: data.firstName,
+  lastName: data.lastName,
+  weight: categoryToWeight(data.categoryWeight),
+  categoryWeight: data.categoryWeight,
+  style: data.club || '',
+  wins: data.recordW ?? 0,
+  losses: data.recordL ?? 0,
+  draws: data.recordD ?? 0,
+  country: data.country || '',
+  status: data.status
+})
 
 // ============================================
 // SERVICIO DE AUTENTICACIÓN
@@ -99,31 +153,29 @@ export const authService = {
 export const fighterService = {
   getAll: async () => {
     const response = await api.get('/public/fighters')
-    // El backend ya devuelve name, weight, wins, losses, draws, style, country
-    return response.data
+    return response.data.map(fighterToFrontend)
   },
   
   getById: async (id) => {
     const response = await api.get(`/public/fighters/${id}`)
-    return response.data
+    return fighterToFrontend(response.data)
   },
   
   search: async (query) => {
     const response = await api.get('/fighters/search', { params: { q: query } })
-    return response.data
+    return response.data.map(fighterToFrontend)
   },
   
-  // Admin: Crear peleador - enviar datos tal cual, backend hace la conversión
+  // Admin: Crear peleador - convertir a formato backend
   create: async (fighterData) => {
-    // El backend acepta: name, weight, style, wins, losses, draws, country
-    const response = await api.post('/admin/fighters', fighterData)
-    return response.data
+    const response = await api.post('/admin/fighters', fighterToBackend(fighterData))
+    return fighterToFrontend(response.data)
   },
   
   // Admin: Actualizar peleador
   update: async (id, fighterData) => {
-    const response = await api.put(`/admin/fighters/${id}`, fighterData)
-    return response.data
+    const response = await api.put(`/admin/fighters/${id}`, fighterToBackend(fighterData))
+    return fighterToFrontend(response.data)
   },
   
   delete: async (id) => {
